@@ -10,6 +10,7 @@ import com.attendance.smartattendance.service.AttendanceService;
 import com.attendance.smartattendance.service.EmailService;
 import com.attendance.smartattendance.service.OtpService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,36 +62,45 @@ public class TeacherAuthController {
 
     //  REGISTER (now sends verification link)
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestBody Teacher teacher) {
+    public ResponseEntity<String> register(@RequestBody Teacher teacher, HttpServletRequest request) {
 
+        // 1. Check if ID already exists
         if (teacherRepository.existsById(teacher.getTeacherId())) {
             return ResponseEntity.badRequest().body("Teacher ID already exists");
         }
 
+        // 2. Check if Email already exists
         if (teacherRepository.existsByEmail(teacher.getEmail())) {
             return ResponseEntity.badRequest().body("Email already in use");
         }
 
+        // 3. Setup Teacher Details
         teacher.setPassword(passwordEncoder.encode(teacher.getPassword()));
         teacher.setClassroomCode(UUID.randomUUID().toString().substring(0, 6));
 
-        // create verification token and mark unverified
         String token = UUID.randomUUID().toString();
         teacher.setVerificationToken(token);
         teacher.setVerified(false);
 
         teacherRepository.save(teacher);
 
-        String verifyLink = "http://localhost:8080/api/teacher/verify?token=" + token;
-        emailService.sendMail(
-                teacher.getEmail(),
-                "Verify your account",
-                "Click to verify your account: " + verifyLink
-        );
+        // 4. FIX: Dynamic URL (Railway URL-a auto-va edukkum)
+        // Local-la run panna localhost varum, Railway-la run panna railway URL varum.
+        String baseUrl = request.getRequestURL().toString().replace(request.getRequestURI(), "");
+        String verifyLink = baseUrl + "/api/teacher/verify?token=" + token;
 
-        System.out.println(verifyLink);
-
-        return ResponseEntity.ok("Teacher registered successfully. Verification email sent.");
+        try {
+            emailService.sendMail(
+                    teacher.getEmail(),
+                    "Verify your account",
+                    "Hi " + teacher.getName() + ",\n\nClick to verify your account: " + verifyLink
+            );
+            System.out.println("Verification Link Sent: " + verifyLink);
+            return ResponseEntity.ok("Teacher registered successfully. Verification email sent.");
+        } catch (Exception e) {
+            // Mail send aagala na error message kaatum
+            return ResponseEntity.status(500).body("Error sending email: " + e.getMessage());
+        }
     }
 
     // verification endpoint for registration
