@@ -64,42 +64,34 @@ public class TeacherAuthController {
     @PostMapping("/register")
     public ResponseEntity<String> register(@RequestBody Teacher teacher, HttpServletRequest request) {
 
-        // 1. Check if ID already exists
-        if (teacherRepository.existsById(teacher.getTeacherId())) {
-            return ResponseEntity.badRequest().body("Teacher ID already exists");
-        }
-
-        // 2. Check if Email already exists
+        // 1. Email check (Unga DB-la already andha email irundha row-a delete pannidunga)
         if (teacherRepository.existsByEmail(teacher.getEmail())) {
             return ResponseEntity.badRequest().body("Email already in use");
         }
 
-        // 3. Setup Teacher Details
+        // 2. Initial Setup
         teacher.setPassword(passwordEncoder.encode(teacher.getPassword()));
         teacher.setClassroomCode(UUID.randomUUID().toString().substring(0, 6));
-
-        String token = UUID.randomUUID().toString();
-        teacher.setVerificationToken(token);
+        teacher.setVerificationToken(UUID.randomUUID().toString());
         teacher.setVerified(false);
 
         teacherRepository.save(teacher);
 
-        // 4. FIX: Dynamic URL (Railway URL-a auto-va edukkum)
-        // Local-la run panna localhost varum, Railway-la run panna railway URL varum.
+        // 3. Dynamic Link (Railway URL-a auto-va edukkum)
         String baseUrl = request.getRequestURL().toString().replace(request.getRequestURI(), "");
-        String verifyLink = baseUrl + "/api/teacher/verify?token=" + token;
+        String verifyLink = baseUrl + "/api/teacher/verify?token=" + teacher.getVerificationToken();
 
+        // 4. Send Email
         try {
             emailService.sendMail(
                     teacher.getEmail(),
                     "Verify your account",
-                    "Hi " + teacher.getName() + ",\n\nClick to verify your account: " + verifyLink
+                    "Hi " + teacher.getName() + ",\n\nClick to verify: " + verifyLink
             );
-            System.out.println("Verification Link Sent: " + verifyLink);
-            return ResponseEntity.ok("Teacher registered successfully. Verification email sent.");
+            return ResponseEntity.ok("Teacher registered. Check your email!");
         } catch (Exception e) {
-            // Mail send aagala na error message kaatum
-            return ResponseEntity.status(500).body("Error sending email: " + e.getMessage());
+
+            return ResponseEntity.status(500).body("Mail Error: " + e.getMessage());
         }
     }
 
